@@ -13,8 +13,8 @@
 #define USER_EMAIL "lucie.boucher@telecomnancy.eu"
 #define USER_PASSWORD "test12"
 
-const char* ssid = "ZON-AFC0";
-const char* password =  "f933af58161c";
+const char* ssid = "iPhoneLola";
+const char* password =  "lola0401";
 
 FirebaseData fbdo;
 FirebaseAuth auth;
@@ -24,10 +24,14 @@ unsigned long dataMillis = 0;
 int count = 0;
 
 #define LIGHT_SENSOR_PIN 36
-#define DHT_SENSOR_PIN 26
+#define DHT_SENSOR_PIN 21
 #define DHT_TYPE DHT11
 
-const int MOTION_SENSOR_PIN= 32;
+#define BLUE_PIN 14
+#define GREEN_PIN 12
+#define RED_PIN 13
+
+const int MOTION_SENSOR_PIN = 32;
 int stateMotion=LOW;
 
 DHT dht(DHT_SENSOR_PIN, DHT_TYPE);
@@ -62,6 +66,9 @@ void setup() {
   Serial.begin(115200);
   pinMode(2,OUTPUT);
   pinMode(MOTION_SENSOR_PIN,INPUT);
+  pinMode(BLUE_PIN,OUTPUT);
+  pinMode(GREEN_PIN,OUTPUT);
+  pinMode(RED_PIN,OUTPUT);
   setTime(0, 0, 0, 6, 5, 2023); 
   dht.begin();
   
@@ -117,8 +124,13 @@ void loop() {
   delay(1000);  //Send a request every 1 second
   digitalWrite(2, LOW);
   delay(1000);
+  if(humidity>=40){
+    digitalWrite(BLUE_PIN,HIGH);
+  }else{
+    digitalWrite(BLUE_PIN,LOW);
+  }
 
-  if (Firebase.ready() && (millis() - dataMillis > 60000 || dataMillis == 0))
+  if (Firebase.ready() && (millis() - dataMillis > 6000 || dataMillis == 0))
       {
           dataMillis = millis();
 
@@ -137,13 +149,14 @@ void loop() {
           // It should encode the space as %20 then the path will be "a%20b%20c/d%20e%20f"
 
           //String
-          content.set("fields/IDofShoe/stringValue","abc123");
+          content.set("fields/IDofShoe/stringValue","hZBzDnPYJXmkqQo6oIeu");
      
-          // double
+          // integer
           content.set("fields/light/integerValue", analogValue);
           content.set("fields/motion/integerValue", stateMotion);
+          
+          //double
           content.set("fields/humidity/doubleValue", humidity);
-
           content.set("fields/temperature/doubleValue", temp);
 
           // timestamp

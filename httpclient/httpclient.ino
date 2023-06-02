@@ -2,9 +2,13 @@
 #include <sd_defines.h>
 #include <SD.h>
 
+//#include <FirebaseJson.h>
+
+
 #include <WiFi.h>
 #include <Firebase_ESP_Client.h>
 #include <addons/TokenHelper.h>
+#include <addons/RTDBHelper.h>
 #include <DHT.h>
 #include <TimeLib.h>
 
@@ -13,8 +17,8 @@
 #define USER_EMAIL "lucie.boucher@telecomnancy.eu"
 #define USER_PASSWORD "test12"
 
-const char* ssid = "iPhoneLola";
-const char* password =  "lola0401";
+const char* ssid = "ulu";
+const char* password =  "lulumimi";
 
 FirebaseData fbdo;
 FirebaseAuth auth;
@@ -22,6 +26,9 @@ FirebaseConfig config;
 
 unsigned long dataMillis = 0;
 int count = 0;
+String humidityFirebase;
+double humidityRateMax= 0.0;
+double tempMax=0.0;
 
 #define LIGHT_SENSOR_PIN 36
 #define DHT_SENSOR_PIN 21
@@ -81,8 +88,6 @@ void setup() {
 
   Serial.println("Connected to the WiFi network");
 
-  double temp = 2.0;
-  double humi = 35.43;
 
   /* Assign the api key (required) */
   config.api_key = API_KEY;
@@ -111,7 +116,7 @@ void loop() {
   stateMotion = digitalRead(MOTION_SENSOR_PIN);
   float humidity = dht.readHumidity();
   float temp = dht.readTemperature();
-
+  
   time_t now = time(nullptr);
   char timestamp[25];
   sprintf(timestamp, "%04d-%02d-%02dT%02d:%02d:%02dZ",year(now), month(now), day(now), hour(now), minute(now), second(now));
@@ -124,17 +129,27 @@ void loop() {
   delay(1000);  //Send a request every 1 second
   digitalWrite(2, LOW);
   delay(1000);
-  if(humidity>=40){
+  
+  String documentPath= "user/v16XDXhy5OaMuf0JTtIMQdh6cpH2/Humidity Rate Threshold";
+  String mask ="";
+  
+            
+  //retrieve Temperature threshold from Firebase
+  
+  /*if(humidity>=humidityRateMax){
     digitalWrite(BLUE_PIN,HIGH);
+    digitalWrite(RED_PIN,LOW);
   }else{
     digitalWrite(BLUE_PIN,LOW);
-  }
+    digitalWrite(RED_PIN,HIGH);
+  } */
 
-  if (Firebase.ready() && (millis() - dataMillis > 6000 || dataMillis == 0))
+  if (Firebase.ready() && (millis() - dataMillis > 60000 || dataMillis == 0))
       {
           dataMillis = millis();
-
-          // For the usage of FirebaseJson, see examples/FirebaseJson/BasicUsage/Create.ino
+        
+        
+           // For the usage of FirebaseJson, see examples/FirebaseJson/BasicUsage/Create.ino
           FirebaseJson content;
 
           // Note: If new document created under non-existent ancestor documents, that document will not appear in queries and snapshot 
@@ -171,6 +186,25 @@ void loop() {
               Serial.printf("ok\n%s\n\n", fbdo.payload().c_str());
           else
               Serial.println(fbdo.errorReason());
+
+          //digitalWrite(BLUE_PIN,HIGH);
+          //retrieve Temperature threshold from Firebase
+          if (Firebase.Firestore.getDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath.c_str(), mask.c_str())){
+            Serial.printf("ok\n%s\n\n", fbdo.payload().c_str());
+            humidityFirebase= fbdo.payload().c_str();
+            humidityRateMax = humidityFirebase.toDouble();
+            digitalWrite(GREEN_PIN,HIGH);
+          }else{
+            Serial.println(fbdo.errorReason());
+            digitalWrite(RED_PIN,HIGH);
+          }
+          
+          if(humidityRateMax==0.0){
+            digitalWrite(BLUE_PIN,HIGH);
+          }else{
+            digitalWrite(RED_PIN,HIGH);
+          }
+          
       }
 
 }

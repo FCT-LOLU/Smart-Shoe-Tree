@@ -23,6 +23,7 @@ const char* password =  "lulumimi";
 FirebaseData fbdo;
 FirebaseAuth auth;
 FirebaseConfig config;
+FirebaseJson json;
 
 unsigned long dataMillis = 0;
 int count = 0;
@@ -130,8 +131,8 @@ void loop() {
   digitalWrite(2, LOW);
   delay(1000);
   
-  String documentPath= "user/v16XDXhy5OaMuf0JTtIMQdh6cpH2/Humidity Rate Threshold";
-  String mask ="";
+  String documentPath1= "user/v16XDXhy5OaMuf0JTtIMQdh6cpH2/Humidity Rate Threshold";
+  String mask ="Humidity Rate Threshold";
   
             
   //retrieve Temperature threshold from Firebase
@@ -189,11 +190,13 @@ void loop() {
 
           //digitalWrite(BLUE_PIN,HIGH);
           //retrieve Temperature threshold from Firebase
-          if (Firebase.Firestore.getDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath.c_str(), mask.c_str())){
+          digitalWrite(RED_PIN,HIGH);
+          if (Firebase.Firestore.getDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath1.c_str(), mask.c_str())){
             Serial.printf("ok\n%s\n\n", fbdo.payload().c_str());
             humidityFirebase= fbdo.payload().c_str();
             humidityRateMax = humidityFirebase.toDouble();
             digitalWrite(GREEN_PIN,HIGH);
+            digitalWrite(RED_PIN,LOW);
           }else{
             Serial.println(fbdo.errorReason());
             digitalWrite(RED_PIN,HIGH);

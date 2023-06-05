@@ -1,9 +1,12 @@
 #include <WiFi.h>
+#include <NTPClient.h>
+#include <WiFiUdp.h>
 #include <Firebase_ESP_Client.h>
 #include <addons/TokenHelper.h>
 #include <addons/RTDBHelper.h>
 #include <DHT.h>
 #include <TimeLib.h>
+#include <ArduinoJson.h>
 
 #define API_KEY "AIzaSyAClVANQ0FM1-1yWTTGdz5U1tAU_ki6qmw"
 #define FIREBASE_PROJECT_ID "smartshoetree-bedd2"
@@ -38,6 +41,13 @@ int stateMotion=LOW;
 DHT dht(DHT_SENSOR_PIN, DHT_TYPE);
 
 String mask = "";
+time_t t;
+
+const long utcOffsetInSeconds = 3600; // Décalage horaire en secondes
+const char* ntpServer = "pool.ntp.org";
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP,ntpServer, utcOffsetInSeconds);
+
 
 // The Firestore payload upload callback function
 void fcsUploadCallback(CFS_UploadStatusInfo info)
@@ -77,8 +87,9 @@ void setup() {
   pinMode(BLUE_PIN,OUTPUT);
   pinMode(GREEN_PIN,OUTPUT);
   pinMode(RED_PIN,OUTPUT);
+  t = now();
+  setTime(t);
 
-  setTime(0, 0, 0, 6, 5, 2023); 
   //Initialize the DHT sensor
   dht.begin();
 
@@ -110,31 +121,105 @@ void setup() {
   Firebase.begin(&config, &auth);
 
   Firebase.reconnectWiFi(true);
-
   
 }
 
 void loop() {
+  
 
   int analogValue = analogRead(LIGHT_SENSOR_PIN);
   stateMotion = digitalRead(MOTION_SENSOR_PIN);
   float humidity = dht.readHumidity();
   float temp = dht.readTemperature();
   
-  time_t now = time(nullptr);
-  char timestamp[25];
-  sprintf(timestamp, "%04d-%02d-%02dT%02d:%02d:%02dZ",year(now), month(now), day(now), hour(now), minute(now), second(now));
-  
+
+  char timestamp[30];
+  sprintf(timestamp, "%04d-%02d-%02dT%02d:%02d:%02dZ",year(t),month(t),day(t), hour(t), minute(t), second(t));
+  Serial.print(timestamp);
+
   if(WiFi.status()== WL_CONNECTED){   //Check WiFi connection status
   digitalWrite(2, HIGH);
   }else{
     Serial.println("Error in WiFi connection");   
   }
-  delay(1000);  //Send a request every 1 second
+  delay(60000);  //Send a request every 1 minute
   digitalWrite(2, LOW);
   delay(1000);
   if (Firebase.ready() && (millis() - dataMillis > 60000 || dataMillis == 0)){
     dataMillis = millis();
+
+    String documentPath1 = "user/lSYK0UAxhqcYKK6z4zXHfuMK58w1/";
+    mask = "";
+    double valuehumidity =0.0;
+    double valuetemperature =0.0;
+
+    if (Firebase.Firestore.getDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath1.c_str(), mask.c_str())){
+
+      // get the Humidity Rate Threshold of fbdo.payload().c_str()
+      int startIndex = fbdo.payload().indexOf("Humidity Rate Threshold") + 48 ;
+      int endIndex = fbdo.payload().indexOf("Humidity Rate Threshold") + 55 ;
+      String humidityRateThreshold = fbdo.payload().substring(startIndex, endIndex) ;
+      valuehumidity = humidityRateThreshold.toDouble();
+
+      // get the Temperature Threshold of fbdo.payload().c_str()
+      int startIndex1 = fbdo.payload().indexOf("Temperature Threshold") + 47 ;
+      int endIndex1 = fbdo.payload().indexOf("Temperature Threshold") + 55 ;
+      String temperatureThreshold = fbdo.payload().substring(startIndex1, endIndex1) ;
+      valuetemperature = temperatureThreshold.toDouble();
+
+      Serial.print("Humidity Rate Threshold: ");
+      Serial.println(valuehumidity);
+      Serial.print("\n Temperature Threshold: ");
+      Serial.println(valuetemperature);
+      
+    }else{
+      Serial.println(fbdo.errorReason());
+      
+    }
+
+    if(humidity>valuehumidity || temp>valuetemperature){
+      Serial.println(valuehumidity);
+      Serial.println(humidity);
+      Serial.println(valuetemperature);
+      Serial.println(temp);
+      digitalWrite(RED_PIN,HIGH);
+      String documentPathNeedCleaning = "shoe/hZBzDnPYJXmkqQo6oIeu";
+      FirebaseJson json;
+      json.set("fields/NeedCleaning/booleanValue", "true");
+      Serial.print("Update need cleaning value... ");
+      if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "" /* databaseId can be (default) or empty */, documentPathNeedCleaning.c_str(), json.raw(), "NeedCleaning" /* updateMask */))
+            Serial.printf("ok\n%s\n\n", fbdo.payload().c_str());
+        else
+            Serial.println(fbdo.errorReason());
+
+
+    }else{
+      String documentPathNeedCleaning = "shoe/hZBzDnPYJXmkqQo6oIeu";
+      FirebaseJson json;
+      json.set("fields/NeedCleaning/booleanValue", "false");
+      Serial.print("Update need cleaning value... ");
+      if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "" /* databaseId can be (default) or empty */, documentPathNeedCleaning.c_str(), json.raw(), "NeedCleaning" /* updateMask */))
+            Serial.printf("ok\n%s\n\n", fbdo.payload().c_str());
+        else
+            Serial.println(fbdo.errorReason());
+    }
+
+    if(analogValue>2000 || stateMotion==HIGH){
+      digitalWrite(GREEN_PIN,HIGH);
+      String documentPathNeedCleaning = "shoe/hZBzDnPYJXmkqQo6oIeu";
+      FirebaseJson json;
+      json.set("fields/DateLastWorn/timestampValue", timestamp);
+      Serial.print("Update date last worn... ");
+      
+      if (Firebase.Firestore.patchDocument(&fbdo, FIREBASE_PROJECT_ID, "" , documentPathNeedCleaning.c_str(), json.raw(), "DateLastWorn" ))
+            Serial.printf("ok\n%s\n\n", fbdo.payload().c_str());
+        else
+            Serial.println(fbdo.errorReason());
+
+    }else{
+      digitalWrite(GREEN_PIN,LOW);
+    }
+
 
     FirebaseJson content;
 
@@ -162,25 +247,10 @@ void loop() {
     if (Firebase.Firestore.createDocument(&fbdo, FIREBASE_PROJECT_ID, "" /* databaseId can be (default) or empty */, documentPath.c_str(), content.raw())){
         Serial.printf("ok\n%s\n\n", fbdo.payload().c_str());
 
-        // get the Humidity Rate Threshold of fbdo.payload().c_str()
-        double humidityRateThreshold = fbdo.payload().substring(fbdo.payload().indexOf("Humidity Rate Threshold") + 23, fbdo.payload().indexOf("Humidity Rate Threshold") + 27).toDouble();
-        Serial.print("Humidity Rate Threshold: ");
-        Serial.println(humidityRateThreshold); // 40.8
     }else
         Serial.println(fbdo.errorReason());
 
-    documentPath = "user/lSYK0UAxhqcYKK6z4zXHfuMK58w1";
-    mask = "";
-    
-    if (Firebase.Firestore.getDocument(&fbdo, FIREBASE_PROJECT_ID, "", documentPath.c_str(), mask.c_str())){
-      Serial.printf("ok\n%s\n\n", fbdo.payload().c_str());
-      
-    }else{
-      Serial.println(fbdo.errorReason());
-      
-    }
       
   }
 
 }
-
